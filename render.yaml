@@ -1,0 +1,17 @@
+services:
+  - type: web
+    name: linktracker
+    runtime: docker
+    plan: starter
+    healthCheckPath: /
+    envVars:
+      - key: ADMIN_PASSWORD
+        generateValue: true
+      - key: PUBLIC_ORIGIN
+        sync: false
+      - key: TRUST_PROXY
+        value: "true"
+    disk:
+      name: linktracker-data
+      mountPath: /data
+      sizeGB: 1
