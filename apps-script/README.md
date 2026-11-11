@@ -8,6 +8,8 @@ This backend follows the same architecture as the daily journal app: GitHub Page
 2. Under **Project Settings → Script Properties**, add `ADMIN_PASSWORD` with a private password of at least 16 characters, if it is not already set. Keep any existing `SIGNING_SECRET` property. The first successful admin sign-in automatically creates the missing `Links` and `Clicks` tabs. You may also run `setup` in the editor to authorize and initialize them before deploying.
 3. Choose **Deploy → Manage deployments → Edit → New version → Deploy**. Execute as **Me** and allow access to **Anyone**. Keep the same `/exec` URL. Authorize spreadsheet access when Google requests it.
 
+In GitHub, select **Settings → Pages → Source → GitHub Actions** once to stop the older branch-based Pages build from competing with the Vite deployment.
+
 Open https://thayakumar.github.io/linktracker/ and sign in. The frontend already includes the deployment URL you supplied, so a GitHub secret is optional. A deployment not running the JSON API will produce a clear update error in the frontend.
 
 Your spreadsheet ID is already set in `SPREADSHEET_ID` in Code.gs:

@@ -12,6 +12,10 @@ Frontend: https://thayakumar.github.io/linktracker/
 
 The supplied script URL and spreadsheet ID are already configured. The first successful admin login creates the `Links` and `Clicks` tabs, preserving existing records with matching headers and unrelated tabs. No separate setup run or GitHub secret is required. Google may ask you to authorize spreadsheet access when deploying. [Detailed setup and API documentation](apps-script/README.md).
 
+## GitHub Pages setting
+
+Once, open **Settings → Pages → Build and deployment → Source** and select **GitHub Actions**. The workflow already publishes successfully, but this setting stops the old branch-based Jekyll deployment from publishing the source files over the built frontend.
+
 ## How it works
 
 `src/lib/sheets-api.ts` sends JSON using `fetch()` without an application/json header, matching the journal app's Apps Script connection. The public script URL comes from optional `VITE_GOOGLE_SCRIPT_URL` configuration, with your current deployment as its default. The URL is visible in the browser. Admin credentials are checked in Apps Script and never embedded in the frontend.
