@@ -4,7 +4,7 @@ const LINK_HEADERS_ = ['id', 'label', 'destination', 'created_utc'];
 const CLICK_HEADERS_ = ['event_id', 'link_id', 'timestamp_utc', 'visitor_hash', 'identity_quality', 'user_agent', 'platform', 'language', 'timezone', 'screen', 'likely_bot', 'ip_address'];
 const MAX_ROWS_ = 50000;
 
-// Run setup once in the editor after setting ADMIN_PASSWORD in Script Properties.
+// Initialization runs automatically on the first dashboard request. No password is needed.
 function setup() {
   config_();
   locked_(function () {
@@ -22,11 +22,11 @@ function setup() {
   });
   return 'Ready: Links and Clicks tabs verified. Existing tabs were preserved.';
 }
-// The URL is public configuration. Authentication is required for all analytics.
+// Personal-use version: all API operations are public, as requested.
 function doGet(e) {
   const action = e && e.parameter && e.parameter.action || 'health';
   if (action !== 'health') return json_({ success: false, error: 'Use POST for this action.' });
-  return json_({ success: true, data: { api: 'linkscope', version: 3 } });
+  return json_({ success: true, data: { api: 'linkscope', version: 4 } });
 }
 function doPost(e) {
   try {
@@ -36,11 +36,10 @@ function doPost(e) {
     if (!p || typeof p !== 'object' || Array.isArray(p)) throw new Error('Invalid request.');
     let data;
     switch (p.action) {
-      case 'login': data = login(p.password); break;
-      case 'getAll': data = getDashboard(p.token); break;
-      case 'createLink': data = createLink(p.token, p.input); break;
-      case 'getActivity': data = getActivity(p.token, p.id); break;
-      case 'deleteLink': data = deleteLink(p.token, p.id); break;
+      case 'getAll': setup(); data = getDashboard(); break;
+      case 'createLink': data = createLink(p.input); break;
+      case 'getActivity': data = getActivity(p.id); break;
+      case 'deleteLink': data = deleteLink(p.id); break;
       case 'getLink': data = getLink_(p.id); break;
       case 'recordClick': data = recordClick(p.id, p.info); break;
       default: throw new Error('Unknown action.');
@@ -56,24 +55,7 @@ function getLink_(id) {
     return { id: row[0], label: untext_(row[1]), url: validUrl_(row[2]) };
   });
 }
-function login(password) {
-  const cfg = config_();
-  // A global throttle, since Apps Script does not expose a visitor IP.
-  locked_(function () {
-    const cache = CacheService.getScriptCache();
-    const key = 'login:' + Math.floor(Date.now() / 60000);
-    const n = Number(cache.get(key) || 0);
-    if (n >= 30) throw new Error('Too many login attempts. Try again in a minute.');
-    cache.put(key, String(n + 1), 120);
-  });
-  if (!equal_(hash_(String(password || ''), cfg.secret), hash_(cfg.password, cfg.secret))) throw new Error('Incorrect password.');
-  // First successful admin sign-in creates missing tabs; no separate setup step is required.
-  setup();
-  const payload = Utilities.base64EncodeWebSafe(JSON.stringify({ expiry: Date.now() + 8 * 3600000, nonce: Utilities.getUuid() }));
-  return payload + '.' + hash_(payload + cfg.password, cfg.secret);
-}
-function getDashboard(token) {
-  authorize_(token);
+function getDashboard() {
   return locked_(function () {
     const links = rows_('Links', LINK_HEADERS_);
     const clicks = rows_('Clicks', CLICK_HEADERS_);
@@ -90,8 +72,7 @@ function getDashboard(token) {
     });
   });
 }
-function createLink(token, input) {
-  authorize_(token);
+function createLink(input) {
   input = input || {};
   const url = validUrl_(input.url);
   const id = String(input.alias || Utilities.getUuid().replace(/-/g, '').slice(0, 12)).trim();
@@ -103,16 +84,14 @@ function createLink(token, input) {
     return { id: id };
   });
 }
-function getActivity(token, id) {
-  authorize_(token);
+function getActivity(id) {
   return locked_(function () {
     return rows_('Clicks', CLICK_HEADERS_).filter(function (c) { return String(c[1]) === String(id); }).slice(-1000).reverse().map(function (c) {
       return { time: c[2], identity: c[4], userAgent: untext_(c[5]), platform: untext_(c[6]), language: untext_(c[7]), timezone: untext_(c[8]), screen: untext_(c[9]), bot: String(c[10]) === 'true', ip: c[11] };
     });
   });
 }
-function deleteLink(token, id) {
-  authorize_(token);
+function deleteLink(id) {
   return locked_(function () {
     const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
     [['Links', LINK_HEADERS_, 0], ['Clicks', CLICK_HEADERS_, 1]].forEach(function (spec) {
@@ -145,22 +124,11 @@ function recordClick(id, info) {
 }
 function config_() {
   const p = PropertiesService.getScriptProperties();
-  const password = p.getProperty('ADMIN_PASSWORD');
-  if (!password || password.length < 16) throw new Error('Set ADMIN_PASSWORD (16+ characters) in Script Properties, then run setup in the editor.');
   let secret = p.getProperty('SIGNING_SECRET');
   if (!secret) locked_(function () { secret = p.getProperty('SIGNING_SECRET'); if (!secret) { secret = Utilities.getUuid() + Utilities.getUuid(); p.setProperty('SIGNING_SECRET', secret); } });
-  return { password: password, secret: secret };
-}
-function authorize_(token) {
-  const cfg = config_();
-  const parts = String(token || '').split('.');
-  if (parts.length !== 2 || !equal_(hash_(parts[0] + cfg.password, cfg.secret), parts[1])) throw new Error('Please sign in again.');
-  let payload;
-  try { payload = JSON.parse(Utilities.newBlob(Utilities.base64DecodeWebSafe(parts[0])).getDataAsString()); } catch (_) { throw new Error('Invalid session.'); }
-  if (!Number.isFinite(payload.expiry) || payload.expiry < Date.now()) throw new Error('Session expired. Please sign in again.');
+  return { secret: secret };
 }
 function hash_(value, secret) { return Utilities.computeHmacSha256Signature(value, secret).map(function (n) { return ('0' + ((n + 256) % 256).toString(16)).slice(-2); }).join(''); }
-function equal_(a, b) { let n = a.length ^ b.length; for (let i = 0; i < a.length; i++) n |= a.charCodeAt(i) ^ (b.charCodeAt(i) || 0); return n === 0; }
 function locked_(fn) { const lock = LockService.getScriptLock(); lock.waitLock(20000); try { return fn(); } finally { lock.releaseLock(); } }
 function validate_(s, headers) { const actual = s.getRange(1, 1, 1, headers.length).getValues()[0]; if (actual.join('\0') !== headers.join('\0')) throw new Error('Unexpected headers in ' + s.getName() + '. No data was overwritten.'); }
 function rows_(name, headers) {
