@@ -56,7 +56,7 @@ function App() {
   return <><header><a className="brand" href={import.meta.env.BASE_URL}>↗ Link<span>Scope</span></a><span className="header-note">A clearer picture of every click</span></header><main>
     {linkId ? <section className="panel narrow">
       <div className="eyebrow">TRACKED LINK</div><h1>{loadingLink ? 'Finding your destination…' : destination ? 'One step to your destination.' : 'Link unavailable.'}</h1>
-      {destination && <><p>You’re heading to <strong>{new URL(destination.url).hostname}</strong>.</p><p>When you press Continue, we record the timestamp, browser and device information, language, timezone and screen size. A random ID saved in this browser helps estimate unique visits.</p><p className="note">Your IP address, precise location and exact device name are unavailable. You can close this page without recording a visit.</p>
+      {destination && <><p>You’re heading to <strong>{new URL(destination.url).hostname}</strong>.</p>
         {recorded ? <a className="button" href={destination.url} rel="noreferrer noopener">Open destination ↗</a> : <button disabled={busy} onClick={() => run(async () => {
           if (!visitorInfo.current) visitorInfo.current = makeVisitorInfo();
           const result = await sheetsApi.record(linkId, visitorInfo.current);
@@ -78,6 +78,6 @@ function App() {
       {activity && <section className="panel activity" ref={activityPanel}><div className="top"><h2>Activity · {activity.id}</h2><button className="secondary" onClick={download}>Export CSV ↗</button></div><p className="note">Latest 1,000 continuations. Times display in your timezone; CSV uses UTC. IP addresses are unavailable in Apps Script.</p>{activity.rows.length ? <table><thead><tr><th>Time</th><th>Device / browser</th><th>Language / timezone / screen</th><th>Identity quality</th><th>Type</th></tr></thead><tbody>{activity.rows.map((c, i) => <tr key={i}><td>{new Date(c.time).toLocaleString()}</td><td>{classify(c.userAgent)}<details><summary>Raw user agent</summary>{c.userAgent}</details>{c.platform}</td><td>{c.language}<br/>{c.timezone}<br/>{c.screen}</td><td>{c.identity}</td><td>{c.bot ? 'Likely bot' : 'Browser'}</td></tr>)}</tbody></table> : <p>No visits yet.</p>}</section>}
     </>}
     <div className="messages" aria-live="polite" role="status">{error && <p className="error">{error}</p>}{message && <p>{message}</p>}</div>
-  </main><footer>LinkScope · Built for useful insights, with Google Sheets.</footer></>;
+  </main><footer>LinkScope</footer></>;
 }
 createRoot(document.getElementById('root')!).render(<React.StrictMode><App/></React.StrictMode>);
