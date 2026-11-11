@@ -2,6 +2,10 @@
 
 A self-hosted link generator with a password-protected analytics dashboard and SQLite persistence. No npm dependencies. Requires Node.js 24+.
 
+## Google Sheets + Apps Script option
+
+For the version that runs entirely in Google Apps Script with your supplied Google Sheet, use the [Apps Script setup guide](apps-script/README.md). It needs no Render service, but cannot collect visitor IP addresses. The instructions below apply to the separate Node server version.
+
 ## Deploy from this repository
 
 [Deploy to Render](https://render.com/deploy?repo=https://github.com/thayakumar/linktracker)
