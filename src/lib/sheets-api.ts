@@ -1,4 +1,4 @@
-export const DEFAULT_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxrGnquZNFl-luDzVYAHNJniHJN997Y6XHKxSaCae-XMskqUOGzifvppHE33ImiKuyp/exec';
+export const DEFAULT_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbyEYHLu-dZSUM6rqmA8_Djke-p5riblVapRat7w1gir17cuLMKqIAvgtqlvqA9vGVAj/exec';
 export type LinkRecord = { id: string; label: string; url: string; created: string; clicks: number; bots: number; unique: number };
 export type Activity = { time: string; identity: string; userAgent: string; platform: string; language: string; timezone: string; screen: string; bot: boolean; ip: string };
 export type VisitorInfo = { visitorId: string; eventId: string; persistent: boolean; ua: string; platform: string; language: string; timezone: string; screen: string };
