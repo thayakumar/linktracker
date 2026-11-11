@@ -1,6 +1,6 @@
 /* LinkScope — paste into Code.gs. Add Index.html from the same folder. */
 const SPREADSHEET_ID = '1eJcZCHT2Yw3C0voFxr265Kfsj2Ic0oV6IFz4Hk-R_zk';
-const WEB_APP_URL = 'https://script.google.com/macros/s/AKfycbzpWQDHZBQ-4Vv9mACuG_QEjviQu4OrmerfBlYJsgJgdWo2lqhJZWeCuyXozOck5c-0/exec';
+const WEB_APP_URL = 'https://script.google.com/macros/s/AKfycbzoHl0lEeGCeMOlOX8JDBvjy8NypwmnQaNRM_ZtRPHwtzAtFbwS_c34av24GahIfNz3/exec';
 const LINK_HEADERS_ = ['id', 'label', 'destination', 'created_utc'];
 const CLICK_HEADERS_ = ['event_id', 'link_id', 'timestamp_utc', 'visitor_hash', 'identity_quality', 'user_agent', 'platform', 'language', 'timezone', 'screen', 'likely_bot', 'ip_address'];
 const MAX_ROWS_ = 50000;
