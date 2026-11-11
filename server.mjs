@@ -14,7 +14,7 @@ const sessions=new Map(),attempts=new Map();
 const mac=s=>createHmac('sha256',secret).update(s).digest('hex');
 const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const botRE=/bot|crawler|spider|preview|facebookexternalhit|slackbot|headless|curl|wget/i;
-const html=readFileSync(fileURLToPath(new URL('./index.html',import.meta.url)));
+const html=readFileSync(fileURLToPath(new URL('./legacy/node-index.html',import.meta.url)));
 const json=(res,status,obj)=>{res.writeHead(status,{'Content-Type':'application/json'});res.end(JSON.stringify(obj));};
 async function body(req){let raw='';for await(const chunk of req){raw+=chunk;if(raw.length>8192)throw Error('Request too large');}return JSON.parse(raw||'{}');}
 const safeEqual=(a,b)=>{const x=Buffer.from(a),y=Buffer.from(b);return x.length===y.length&&timingSafeEqual(x,y);};

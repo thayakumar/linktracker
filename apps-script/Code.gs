@@ -1,6 +1,5 @@
-/* LinkScope — paste into Code.gs. Add Index.html from the same folder. */
+/* LinkScope JSON API — only Code.gs is needed. Frontend runs on GitHub Pages. */
 const SPREADSHEET_ID = '1eJcZCHT2Yw3C0voFxr265Kfsj2Ic0oV6IFz4Hk-R_zk';
-const WEB_APP_URL = 'https://script.google.com/macros/s/AKfycbzoHl0lEeGCeMOlOX8JDBvjy8NypwmnQaNRM_ZtRPHwtzAtFbwS_c34av24GahIfNz3/exec';
 const LINK_HEADERS_ = ['id', 'label', 'destination', 'created_utc'];
 const CLICK_HEADERS_ = ['event_id', 'link_id', 'timestamp_utc', 'visitor_hash', 'identity_quality', 'user_agent', 'platform', 'language', 'timezone', 'screen', 'likely_bot', 'ip_address'];
 const MAX_ROWS_ = 50000;
@@ -23,10 +22,39 @@ function setup() {
   });
   return 'Ready: Links and Clicks tabs verified. Existing tabs were preserved.';
 }
+// The URL is public configuration. Authentication is required for all analytics.
 function doGet(e) {
-  const t = HtmlService.createTemplateFromFile('Index');
-  t.linkId = String(e && e.parameter && e.parameter.r || '').slice(0, 60);
-  return t.evaluate().setTitle('LinkScope · Link analytics').addMetaTag('viewport', 'width=device-width, initial-scale=1');
+  const action = e && e.parameter && e.parameter.action || 'health';
+  if (action !== 'health') return json_({ success: false, error: 'Use POST for this action.' });
+  return json_({ success: true, data: { api: 'linkscope', version: 3 } });
+}
+function doPost(e) {
+  try {
+    const raw = e && e.postData && e.postData.contents || '{}';
+    if (raw.length > 12000) throw new Error('Request too large.');
+    const p = JSON.parse(raw);
+    if (!p || typeof p !== 'object' || Array.isArray(p)) throw new Error('Invalid request.');
+    let data;
+    switch (p.action) {
+      case 'login': data = login(p.password); break;
+      case 'getAll': data = getDashboard(p.token); break;
+      case 'createLink': data = createLink(p.token, p.input); break;
+      case 'getActivity': data = getActivity(p.token, p.id); break;
+      case 'deleteLink': data = deleteLink(p.token, p.id); break;
+      case 'getLink': data = getLink_(p.id); break;
+      case 'recordClick': data = recordClick(p.id, p.info); break;
+      default: throw new Error('Unknown action.');
+    }
+    return json_({ success: true, data: data });
+  } catch (error) { return json_({ success: false, error: String(error.message || error) }); }
+}
+function json_(data) { return ContentService.createTextOutput(JSON.stringify(data)).setMimeType(ContentService.MimeType.JSON); }
+function getLink_(id) {
+  return locked_(function () {
+    const row = rows_('Links', LINK_HEADERS_).find(function (l) { return String(l[0]) === String(id); });
+    if (!row) throw new Error('This tracking link is unavailable.');
+    return { id: row[0], label: untext_(row[1]), url: validUrl_(row[2]) };
+  });
 }
 function login(password) {
   const cfg = config_();
@@ -39,6 +67,8 @@ function login(password) {
     cache.put(key, String(n + 1), 120);
   });
   if (!equal_(hash_(String(password || ''), cfg.secret), hash_(cfg.password, cfg.secret))) throw new Error('Incorrect password.');
+  // First successful admin sign-in creates missing tabs; no separate setup step is required.
+  setup();
   const payload = Utilities.base64EncodeWebSafe(JSON.stringify({ expiry: Date.now() + 8 * 3600000, nonce: Utilities.getUuid() }));
   return payload + '.' + hash_(payload + cfg.password, cfg.secret);
 }
@@ -56,7 +86,7 @@ function getDashboard(token) {
     });
     return links.reverse().map(function (l) {
       const x = totals[String(l[0])] || { clicks: 0, bots: 0, unique: {} };
-      return { id: l[0], label: untext_(l[1]), url: l[2], created: l[3], clicks: x.clicks, bots: x.bots, unique: Object.keys(x.unique).length, trackingUrl: WEB_APP_URL + '?r=' + encodeURIComponent(l[0]) };
+      return { id: l[0], label: untext_(l[1]), url: l[2], created: l[3], clicks: x.clicks, bots: x.bots, unique: Object.keys(x.unique).length };
     });
   });
 }
@@ -70,7 +100,7 @@ function createLink(token, input) {
     const existing = rows_('Links', LINK_HEADERS_);
     if (existing.some(function (l) { return String(l[0]) === id; })) throw new Error('This alias already exists.');
     append_('Links', [id, text_(String(input.label || url).slice(0, 120)), url, new Date().toISOString()]);
-    return WEB_APP_URL + '?r=' + encodeURIComponent(id);
+    return { id: id };
   });
 }
 function getActivity(token, id) {
@@ -107,7 +137,7 @@ function recordClick(id, info) {
     const url = validUrl_(link[2]);
     const data = rows_('Clicks', CLICK_HEADERS_);
     // Idempotent retries: a browser retry does not create another click.
-    if (!data.some(function (c) { return String(c[0]) === event; })) {
+    if (!data.some(function (c) { return String(c[0]) === event && String(c[1]) === String(id); })) {
       append_('Clicks', [event, String(id), new Date().toISOString(), hash_(String(id) + ':' + visitor, cfg.secret), info.persistent === true ? 'browser-storage estimate' : 'per-visit fallback', text_(ua), text_(String(info.platform || '').slice(0, 100)), text_(String(info.language || '').slice(0, 100)), text_(String(info.timezone || '').slice(0, 100)), text_(String(info.screen || '').slice(0, 80)), /bot|crawler|spider|headless|preview/i.test(ua) ? 'true' : 'false', 'Unavailable in Apps Script']);
     }
     return { url: url };

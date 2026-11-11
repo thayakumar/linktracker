@@ -1,50 +1,48 @@
 # LinkScope
 
-A self-hosted link generator with a password-protected analytics dashboard and SQLite persistence. No npm dependencies. Requires Node.js 24+.
+A custom link generator with a private analytics dashboard, using the same architecture as [daily-journal-habit-tracker](https://github.com/thayakumar/daily-journal-habit-tracker): **Vite + React → GitHub Pages → Apps Script JSON API → Google Sheets**.
 
-## Google Sheets + Apps Script option
+Frontend: https://thayakumar.github.io/linktracker/
 
-For the version that runs entirely in Google Apps Script with your supplied Google Sheet, use the [Apps Script setup guide](apps-script/README.md). It needs no Render service, but cannot collect visitor IP addresses. The instructions below apply to the separate Node server version.
+## Finish the Google setup
 
-## Deploy from this repository
+1. Replace your deployment project's **Code.gs** with [apps-script/Code.gs](apps-script/Code.gs). No Index.html file is needed.
+2. Set `ADMIN_PASSWORD` (at least 16 characters) under Apps Script **Project Settings → Script Properties**, if not already set.
+3. Update the web app deployment to **New version**, execute as **Me**, access **Anyone**. Keep the same `/exec` URL.
 
-[Deploy to Render](https://render.com/deploy?repo=https://github.com/thayakumar/linktracker)
+The supplied script URL and spreadsheet ID are already configured. The first successful admin login creates the `Links` and `Clicks` tabs, preserving existing records with matching headers and unrelated tabs. No separate setup run or GitHub secret is required. Google may ask you to authorize spreadsheet access when deploying. [Detailed setup and API documentation](apps-script/README.md).
 
-The included Render Blueprint creates a Docker web service with a **paid persistent disk**. Review Render's current pricing before creating it. Set `PUBLIC_ORIGIN` to the exact HTTPS origin of your service (no trailing slash), for example `https://linktracker-xxxx.onrender.com`. Render generates `ADMIN_PASSWORD`; retrieve it in Render's environment settings and use it to sign into the dashboard. Don't put the password in the repository or chat.
+## How it works
 
-After deployment, open the service URL, sign in, create a destination link and share the generated `/r/alias` URL. For a custom domain, add it in Render and update `PUBLIC_ORIGIN` to that origin. The link origin and dashboard origin should match.
+`src/lib/sheets-api.ts` sends JSON using `fetch()` without an application/json header, matching the journal app's Apps Script connection. The public script URL comes from optional `VITE_GOOGLE_SCRIPT_URL` configuration, with your current deployment as its default. The URL is visible in the browser. Admin credentials are checked in Apps Script and never embedded in the frontend.
 
-GitHub stores source code. **GitHub Pages does not run this server or database.** A hosting account is required to bring the application online.
+The frontend is deployed by `.github/workflows/deploy.yml` on pushes to `main`. Vite uses `/linktracker/` as its base path. Tracking links are frontend URLs such as `https://thayakumar.github.io/linktracker/?r=summer-launch`.
 
-## Local run
+When a visitor presses Continue on the notice, the app appends an event in Sheets and redirects to the destination. Unique-browser estimates, UTC timestamps, user-agent, platform, language, timezone and screen size are available. Admins can view recent activity, export CSV and delete links with their records.
 
-Set a strong `ADMIN_PASSWORD` of at least 16 characters in your terminal environment, then run:
+**Apps Script cannot record visitor IP addresses or exact device names.** Initial link opens and previews are not counted; tracked continuations are counted. Browser IDs estimate unique browsers, not verified people. Full details and limits are in the setup guide. Keep the sheet restricted: public visitors need web-app access, not sheet access.
+
+Unlike the journal's editable snapshots, tracking events append individually so one browser cannot overwrite another browser's events. Failed writes are reported; retries use the same event ID to avoid duplicates. The dashboard reads current cloud data on sign-in and refresh. It does not store analytics or admin tokens in localStorage. The only local storage is a random visitor ID created after Continue.
+
+## Local development
+
+Requires Node.js 24+.
 
 ```sh
-npm start
+npm ci
+npm run dev
 ```
 
-Open http://localhost:3000. SQLite data lives in `data/`. To bind externally use `HOST=0.0.0.0`, and terminate HTTPS at a trusted reverse proxy. Set `PUBLIC_ORIGIN` to your exact public origin. Use `TRUST_PROXY=true` only when your proxy replaces `X-Forwarded-For` with a trustworthy client IP and direct access to the app is blocked; otherwise keep it unset. Spoofed proxy headers can corrupt IP analytics if this is configured incorrectly.
-
-`PORT`, `HOST`, `DATA_DIR`, `PUBLIC_ORIGIN`, `ADMIN_PASSWORD` and `TRUST_PROXY` are runtime environment settings. Do not commit secrets. Docker stores data at `/data`; mount a persistent volume there. Use one application instance with its SQLite disk. Back up the disk using SQLite-aware backups. Sessions expire after 8 hours and reset on restart.
-
-## What is recorded
-
-- UTC request timestamp, source IP, raw user-agent, referring URL and accepted languages, when available.
-- Estimated device type, OS and browser derived in the dashboard from user-agent text.
-- Likely-bot classification using user-agent heuristics.
-- Per-link estimated unique visitors using a keyed hash of IP + user-agent. The dashboard sums per-link uniques; this is not a global unique-person count.
-
-No precise location, email address, exact device name, GPS, camera, microphone or contact list is obtained. IPs may belong to VPNs or proxies. User-agent strings can be reduced or forged. Referrers may be omitted or contain sensitive URL values. Bot detection is approximate. Repeated requests count as clicks; uniqueness is an estimate, not proof of identity.
-
-Visitors see a notice that the visit has been recorded and can choose **Continue to destination**. The initial GET is recorded before the notice is displayed; HEAD requests are not counted. This is a disclosure, not an opt-in consent flow. If your use requires prior consent, change the collection flow before distributing links. No tracking cookies or third-party enrichment services are used.
-
-Records remain until you delete the corresponding link, which deletes its analytics too. Use the tool for links you are authorized to distribute, provide appropriate privacy information to recipients, and delete data you no longer need. CSV exports contain up to the latest 10,000 requests per link. The dashboard is private; public visitors cannot create links or retrieve analytics.
-
-## Verify
+Open the printed URL under `/linktracker/`. Your supplied script URL is the default. To override it, copy `.env.example` to `.env` and change `VITE_GOOGLE_SCRIPT_URL`. For GitHub builds, the same optional repository secret or Actions variable overrides the default. Never place a password in a `VITE_` variable.
 
 ```sh
 npm test
+npm run build
+npm run preview
 ```
 
-Integration coverage includes authentication, origin validation, unsafe-URL rejection, real click recording, estimated deduplication, bot exclusion, HEAD exclusion, CSV export and deletion. Browser and production hosting checks are separate.
+Tests cover Apps Script setup/auth/routing, click deduplication, unique counts, browser API requests, error handling, tracking URLs and CSV safety. Google authorization and live backend operation must be verified after you update the deployment.
+
+## Optional Node server
+
+The earlier SQLite server remains available with `ADMIN_PASSWORD` set in the environment and `npm start`. It serves `legacy/node-index.html` and is independent of the Vite/Sheets frontend. Its Dockerfile and Render blueprint remain for users who need server-side IP recording. Render requires persistent storage; review its pricing before using it. The default GitHub Pages deployment uses Apps Script and needs no Render service. Earlier iframe-based HTML is retained under `legacy/` for reference and is not used in the current app.

@@ -1,5 +1,7 @@
-name: Test
-on: [push, pull_request]
+name: Validate link tracker
+on:
+  pull_request:
+    branches: [main]
 permissions:
   contents: read
 jobs:
@@ -10,4 +12,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 24
+          cache: npm
+      - run: npm ci
       - run: npm test
+      - run: npm run build

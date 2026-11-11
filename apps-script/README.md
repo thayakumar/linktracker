@@ -1,35 +1,56 @@
-# Google Apps Script version
+# Apps Script JSON backend
 
-This is a separate, complete web app using the provided Google Sheet as its database. It does not need the Node server or Render. Google Apps Script quotas and spreadsheet size limits apply; it is intended for low-volume use.
+This backend follows the same architecture as the daily journal app: GitHub Pages serves a Vite frontend, browser `fetch()` calls Apps Script, and Apps Script reads/writes Google Sheets. **Only Code.gs goes into Apps Script. No HTML file is needed.**
 
-## Paste these two files
+## Three steps in Google
 
-1. Open the **Apps Script editor for the project behind your existing `/exec` deployment**. The `/exec` link opens the running app, not its source editor. Find the project at https://script.google.com/home if needed. Opening Extensions → Apps Script from the spreadsheet might open a different project; in that case, deploy that project and update `WEB_APP_URL` in the code.
-2. Replace `Code.gs` with [Code.gs](./Code.gs).
-3. Click **+ → HTML**, name it **Index** (capital I), and paste [Index.html](./Index.html).
-4. In **Project Settings → Script Properties**, add `ADMIN_PASSWORD` with a unique password of at least 16 characters. Keep it private. Do not put it in the sheet or source code.
-5. In the editor, select **setup** and click **Run**. Approve spreadsheet access under the account that can edit the provided spreadsheet. The script adds `Links` and `Clicks` tabs, writes their headers and preserves `Sheet1` and any other tabs. Existing `Links` or `Clicks` tabs with unexpected headers produce an error instead of being overwritten.
-6. Choose **Deploy → Manage deployments → Edit** for the existing web app. Select **New version**, execute as **Me**, and allow access to **Anyone**; then deploy. If creating a new deployment instead, update `WEB_APP_URL` in `Code.gs` to its `/exec` URL and deploy a new version again. Some Google Workspace policies disallow anonymous access; this must be allowed for public links.
-7. Open the `/exec` URL without `?r=...`, enter your admin password, and create your first link. The app returns a URL ending in `?r=your-alias`.
+1. In the Apps Script editor behind your existing deployment, replace **Code.gs** with [this file](./Code.gs).
+2. Under **Project Settings → Script Properties**, add `ADMIN_PASSWORD` with a private password of at least 16 characters, if it is not already set. Keep any existing `SIGNING_SECRET` property. The first successful admin sign-in automatically creates the missing `Links` and `Clicks` tabs. You may also run `setup` in the editor to authorize and initialize them before deploying.
+3. Choose **Deploy → Manage deployments → Edit → New version → Deploy**. Execute as **Me** and allow access to **Anyone**. Keep the same `/exec` URL. Authorize spreadsheet access when Google requests it.
 
-**Keep spreadsheet sharing restricted.** The web app runs with your spreadsheet permission, so visitors do not need sheet access. Anyone who can view the spreadsheet can view its raw analytics.
+Open https://thayakumar.github.io/linktracker/ and sign in. The frontend already includes the deployment URL you supplied, so a GitHub secret is optional. A deployment not running the JSON API will produce a clear update error in the frontend.
 
-## How tracking works
+Your spreadsheet ID is already set in `SPREADSHEET_ID` in Code.gs:
 
-Visitors see a tracking notice. Pressing **Continue** saves a visit, then displays **Open destination**. This second explicit link works within Apps Script's iframe navigation rules. Initial opens, visitors who stop at the notice, and bots that do not execute JavaScript and continue are **not counted**.
+`1eJcZCHT2Yw3C0voFxr265Kfsj2Ic0oV6IFz4Hk-R_zk`
 
-The `Clicks` tab records event ID, link ID, server UTC timestamp, per-link hashed random browser ID, identity quality, user agent, reported platform, language, timezone, screen resolution and likely-bot flag. IP address is explicitly marked unavailable. Device/browser summaries are estimated from user-agent text.
+It uses `SpreadsheetApp.openById(...)`, so the script can be bound to that spreadsheet or run as a standalone project. Your deployment account must have edit access. `Sheet1` and unrelated tabs are preserved. Existing database tabs with unexpected headers are rejected instead of overwritten. Old click records using the same schema remain available.
 
-**Google Apps Script does not expose visitor IP addresses or arbitrary HTTP request headers.** It cannot reliably read the original page referrer through its iframe. It cannot obtain precise GPS, exact device name, recipient identity, email, or hardware serial numbers. This app does not request those permissions or use third-party IP services. Keep using the Node server version if you require IP recording.
+## How the frontend connects
 
-A random ID is saved to browser local storage only after Continue. Each link estimates unique browsers with a keyed hash of that ID. Storage may be blocked or partitioned in Apps Script's iframe; clearing storage or changing browsers counts again. Without storage, each visit gets a fresh ID and may overcount uniques. Browser-reported details and bot labels are not verified. Summed per-link uniques are not global unique people.
+`src/lib/sheets-api.ts` reads `VITE_GOOGLE_SCRIPT_URL`. The default is your current public `/exec` URL. Locally, set an optional override in `.env`; in GitHub Actions, set an optional repository secret or variable with the same name. This URL is public configuration, not an access credential. Never put `ADMIN_PASSWORD` or `SIGNING_SECRET` in a `VITE_` variable.
 
-Activity shows the latest 1,000 records for a selected link and exports those records to CSV. All records remain in the spreadsheet until deleted. Delete removes the link and its click records. Copy the spreadsheet before deleting if you need a backup. Do not reorder or rename database columns. Each database tab is capped at 50,000 rows; archive older records before reaching that cap. Full-sheet reads and a script lock make this suitable for modest traffic, not a large analytics service.
+POST requests send a JSON string body **without setting an application/json header**, matching the journal app and avoiding a CORS preflight. Apps Script returns `{ "success": true, "data": ... }` or `{ "success": false, "error": "..." }`. The frontend checks the confirmation before reporting success. No `no-cors` fetches, JSONP, OAuth keys or service-account files are needed.
 
-The admin session lasts 8 hours and stays in page memory. Sign out clears it from the page. Changing `ADMIN_PASSWORD` invalidates existing tokens. Do not share the password or tokens. The global login throttle permits up to 30 attempts per minute because Apps Script exposes no source IP. Public browser submissions can be automated or fabricated, so click counts should not be treated as proof of identity or used for billing.
+| Action | Access | Purpose |
+| --- | --- | --- |
+| GET `?action=health` | Public | API version only; no spreadsheet data |
+| POST `login` | Password | Issue an 8-hour admin token; create missing tabs |
+| POST `getAll` | Admin token | Links and aggregate analytics |
+| POST `createLink` | Admin token | Append one link |
+| POST `getActivity` | Admin token | Latest 1,000 events for one link |
+| POST `deleteLink` | Admin token | Remove link and associated events |
+| POST `getLink` | Public | Destination for a supplied link ID |
+| POST `recordClick` | Public | Append one visitor event with retry deduplication |
 
-## Verification status
+Admin tokens travel in POST bodies, not GET URLs. A publicly callable `getAll` like the journal's would expose the tracker’s private visitor data, so reads that contain analytics require a token. Do not share the admin password. Page memory holds the session; sign-out clears it from the page. Password rotation invalidates existing tokens. A global throttle permits 30 login attempts per minute because Apps Script exposes no client IP.
 
-Local tests cover initialization, preservation of unrelated tabs, password checks, session invalidation on password changes, URL validation, duplicate aliases, formula-safe values, idempotent event retries, estimated uniques, bot exclusion, deletion, header validation, and browser-script syntax. These tests mock Apps Script services; they do not establish that Google authorization or your web deployment is working.
+## Records and limits
 
-After deploying, test in a private browser window: create a link as admin, open it as a visitor, press Continue, then Open destination. Refresh the admin dashboard and verify the timestamp and a new row in `Clicks`. A second continuation from the same browser should add a click but retain the unique count when browser storage works.
+`Links` has `id | label | destination | created_utc`.
+
+`Clicks` has `event_id | link_id | timestamp_utc | visitor_hash | identity_quality | user_agent | platform | language | timezone | screen | likely_bot | ip_address`.
+
+Counts start after the visitor presses **Continue** on the frontend notice. It then redirects to the destination. Initial page opens and previews are not counted. Events append individually; the frontend does not upload an old snapshot that could overwrite concurrent visitor events. The server uses a script lock and an event ID to deduplicate retries.
+
+A random first-party browser ID estimates unique browsers per link. Clearing storage, using a different browser, or blocked storage can create another unique estimate. Summed per-link uniques are not global unique people. IP is explicitly marked unavailable: Apps Script does not expose visitor IPs or arbitrary HTTP headers. Precise location, recipient email, exact device name and original referrer are not collected. Device/browser labels come from visitor-reported user-agent text and can be spoofed. Bots that do not run JavaScript or continue are not counted. Public event submissions can be fabricated, so counts are not proof of identity.
+
+**Keep spreadsheet sharing restricted.** Visitors need access to the public web app, not to the sheet. Anyone with sheet access can read the raw analytics. Records remain until the corresponding link is deleted; back up the sheet if needed. Each database tab is capped at 50,000 rows and Apps Script quotas apply. This full-sheet-read implementation suits modest traffic.
+
+## Verify after redeploying
+
+Open the `/exec?action=health` URL. It should return JSON containing `"api":"linkscope","version":3`, not a web page or an Index-file error. This proves the API version is deployed; it does not check spreadsheet authorization.
+
+Sign in on GitHub Pages, create a link, open it in a separate browser tab, press Continue, and confirm a row appears in `Clicks`. Repeating from the same browser should increase continuations while keeping the unique count unchanged when storage works. Activity and CSV export show the latest 1,000 records for a selected link.
+
+Local tests mock Apps Script services. They verify authorization, setup, preservation of unrelated tabs, schema validation, URL restrictions, event deduplication, uniques, bot classification, deletion and JSON routing. They do not replace the live Google authorization and end-to-end checks above.
