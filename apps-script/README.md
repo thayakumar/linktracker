@@ -26,9 +26,9 @@ GET `?action=health` returns `{"success":true,"data":{"api":"linkscope","version
 
 `Clicks` columns: `event_id | link_id | timestamp_utc | visitor_hash | identity_quality | user_agent | platform | language | timezone | screen | likely_bot | ip_address`.
 
-Visits are recorded after a visitor presses Continue, then the frontend redirects to the destination. Initial page opens and previews are not counted. Events append individually under a script lock. Retrying the same event ID does not duplicate an event.
+Visits are recorded automatically when the tracking frontend runs, then the browser redirects to the destination. There is no Continue step. JavaScript-free previews are not counted. Events append individually under a script lock. Retrying the same event ID does not duplicate an event.
 
-Unique browsers are estimated per link with a hashed random browser ID. Clearing browser storage, changing browsers, or blocked storage may increase unique estimates. The sum across links is not a count of unique people. Client-supplied fields can be fabricated. Bot detection is approximate, and bots that never continue are not counted.
+Unique browsers are estimated per link with a hashed random browser ID. Clearing browser storage, changing browsers, or blocked storage may increase unique estimates. The sum across links is not a count of unique people. Client-supplied fields can be fabricated. Bot detection is approximate, and bots that never run the frontend are not counted.
 
 Apps Script does not expose visitor IP addresses or arbitrary HTTP headers. IP is marked unavailable. Exact device names, precise location, recipient identities and original referrers are not collected. Platform, browser/device estimates, language, timezone and screen size come from the browser.
 
@@ -36,6 +36,8 @@ Activity and CSV export include the latest 1,000 events for a link. Records rema
 
 ## Verify
 
-After redeploying, check `?action=health` for version 4, open the frontend, create a link, open it in another tab and press Continue. Refresh the dashboard and confirm a row appears in `Clicks`. Repeat from the same browser to check the unique estimate when storage is available.
+After redeploying, check `?action=health` for version 4, open the frontend, create a link, open it in another tab and wait for the automatic redirect. Refresh the dashboard and confirm a row appears in `Clicks`. Repeat from the same browser to check the unique estimate when storage is available.
 
 Local tests mock Apps Script services; live authorization and deployment still need the checks above. No password setup or Index.html file is needed.
+
+Automatic redirects wait for the Apps Script recording response. If recording fails, the frontend attempts a destination lookup and redirects without claiming a successful count. Apps Script can take several seconds; this is not an HTTP server redirect. JavaScript and network access are required.

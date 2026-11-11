@@ -36,3 +36,15 @@ test('old password backend shows deployment instructions',async()=>{
 const api=createSheetsApi(DEFAULT_SCRIPT_URL,async()=>new Response(JSON.stringify({success:false,error:'Set ADMIN_PASSWORD'})));
 await assert.rejects(api.dashboard(),/older login version/);
 });
+
+const { createRedirectRequest } = await moduleAt('../src/lib/redirect.ts');
+test('automatic redirect shares one recording request and uses its destination', async () => {
+  let calls=0;
+  const info={eventId:'same-event'};
+  const resolve=createRedirectRequest('test',info,async(id,event)=>{calls++;assert.equal(event,info);return {url:'https://example.com/path'}},async()=>{throw Error('unneeded lookup')});
+  const [a,b]=await Promise.all([resolve(),resolve()]);assert.equal(calls,1);assert.equal(a,'https://example.com/path');assert.equal(b,a);
+});
+test('automatic redirect falls back when logging fails and rejects unsafe destinations', async () => {
+  const resolve=createRedirectRequest('test',{},async()=>{throw Error('logging unavailable')},async()=>({url:'https://example.com/fallback'}));assert.equal(await resolve(),'https://example.com/fallback');
+  const invalid=createRedirectRequest('test',{},async()=>({url:'javascript:alert(1)'}),async()=>({url:'https://example.com'}));await assert.rejects(invalid(),/Invalid destination/);
+});
